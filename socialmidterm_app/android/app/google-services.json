@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "425909407022",
+    "project_id": "socialmidtermapp",
+    "storage_bucket": "socialmidtermapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:425909407022:android:018c46cc74cf5077d8febf",
+        "android_client_info": {
+          "package_name": "com.example.socialmidterm_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAIWyR8fGqMCUA_5QC9poLGPHwnaKOn3HE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:425909407022:android:adbd38ecbe4147ccd8febf",
+        "android_client_info": {
+          "package_name": "com.example.socialmidtermapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAIWyR8fGqMCUA_5QC9poLGPHwnaKOn3HE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
