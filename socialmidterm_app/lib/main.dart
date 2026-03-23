@@ -1,24 +1,18 @@
 import 'package:flutter/material.dart';
 import 'theme/app_theme.dart';
 import 'screens/welcome_screen.dart';
-import 'screens/home_screen.dart'; // Connected to: The main dashboard after login
+import 'screens/home_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Logic: Handles user session persistence
+import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 
-void main() async {
-  // Logic: Ensures Flutter framework is ready before starting Firebase
+void main() {
+  // Logic: Pre-bind the framework before initialization
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Connection: Connects the app to your specific Firebase project
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
   runApp(MyApp());
 }
 
 class MyApp extends StatefulWidget {
-  // Logic: Allows child widgets to find this state to trigger theme changes
   static _MyAppState? of(BuildContext context) =>
       context.findAncestorStateOfType<_MyAppState>();
 
@@ -27,10 +21,14 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  // State: Default theme starts as Light
   ThemeMode themeMode = ThemeMode.light;
 
-  // Logic: Function called by the toggle button in HomeScreen AppBar
+  // Connection: Initialize Firebase immediately.
+  // We don't use 'late' to avoid initialization errors.
+  final Future<FirebaseApp> _initialization = Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
   void toggleTheme(bool dark) {
     setState(() {
       themeMode = dark ? ThemeMode.dark : ThemeMode.light;
@@ -45,36 +43,55 @@ class _MyAppState extends State<MyApp> {
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
 
-      // Logic: The "Gatekeeper" of the app.
-      // It listens to FirebaseAuth to see if a user is already logged in.
-      home: StreamBuilder<User?>(
-        // Connection: authStateChanges emits a new value whenever a user logs in or out
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          // Logic: Prevents a "flicker" of the login screen while checking local storage
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
+      // Logic: FutureBuilder handles the bridge between the Native Splash and the App
+      home: FutureBuilder(
+        future: _initialization,
+        builder: (context, appSnapshot) {
+          // UI: While Firebase connects, we return a blank Scaffold.
+          // Because of 'flutter_native_splash', the user will continue to see
+          // the logo from the native side until this is ready. No flicker!
+          if (appSnapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(backgroundColor: Colors.transparent);
           }
 
-          // Logic: If user data exists in snapshot, the user is authenticated.
-          // Connection: Passes basic Firebase Auth data (display name/photo) to HomeScreen.
-          if (snapshot.hasData) {
-            return HomeScreen(
-              username: snapshot.data!.displayName ?? "User",
-              profileImage: snapshot.data!.photoURL,
-            );
+          if (appSnapshot.hasError) {
+            return Scaffold(body: Center(child: Text("Firebase Error: ${appSnapshot.error}")));
           }
 
-          // Logic: If snapshot is null, user is logged out or session expired.
-          return WelcomeScreen();
+          // Connection: Once Firebase is ready, pass control to AuthWrapper
+          return const AuthWrapper();
         },
       ),
 
-      // Connection: Named routes for navigating specifically to the login flow
       routes: {
         '/login': (context) => WelcomeScreen(),
+      },
+    );
+  }
+}
+
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, authSnapshot) {
+        // UI: Stay on a blank screen while checking the login session.
+        // This keeps the native logo visible until the Home or Welcome screen is ready.
+        if (authSnapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(backgroundColor: Colors.transparent);
+        }
+
+        if (authSnapshot.hasData) {
+          return HomeScreen(
+            username: authSnapshot.data!.displayName ?? "User",
+            profileImage: authSnapshot.data!.photoURL,
+          );
+        }
+
+        return WelcomeScreen();
       },
     );
   }

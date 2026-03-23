@@ -45,11 +45,18 @@ class WelcomeScreen extends StatelessWidget {
 
             children: [
 
-              // UI: Main branding icon representing the social/camera nature of the app
-              Icon(
-                Icons.camera_alt,
-                size: 90,
-                color: primaryColor,
+              // UI: Main branding logo (Replaced generic camera icon with your asset)
+              // Logic: Ensure 'assets/logo.png' is in your pubspec.yaml
+              Image.asset(
+                'assets/logo.png',
+                width: 120,
+                height: 120,
+                // UI: Safety fallback to the camera icon if the image fails to load
+                errorBuilder: (context, error, stackTrace) => Icon(
+                  Icons.camera_alt,
+                  size: 90,
+                  color: primaryColor,
+                ),
               ),
 
               const SizedBox(height: 20),

@@ -60,7 +60,7 @@ class FeedPage extends StatelessWidget {
                 postId: postId, // Logic: The unique Firestore document ID
                 postUid: data['uid'] ?? '', // Connection: The ID of the user who created the post
                 username: data['username'] ?? 'User',
-                imageUrl: data['ImageUrl'] ?? '', // Logic: Supports both Image and Video URLs
+                ImageUrl: data['ImageUrl'] ?? '', // Logic: Supports both Image and Video URLs
                 caption: data['caption'] ?? '',
                 profileImage: data['profileImage'] ?? '',
                 postType: data['postType'] ?? 'image', // Logic: Tells PostCard whether to show Image or Video widget

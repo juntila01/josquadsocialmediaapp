@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '/widgets/post_card.dart'; // Connection: Reuses your VideoPreviewWidget for consistent playback
+import '/widgets/post_card.dart'; // Connection: Reuses your VideoPreviewWidget
 
 class PostDetailScreen extends StatefulWidget {
-  // Logic: Receives the entire QueryDocumentSnapshot from the GridView or Feed
   final QueryDocumentSnapshot post;
 
   const PostDetailScreen({Key? key, required this.post}) : super(key: key);
@@ -14,24 +13,35 @@ class PostDetailScreen extends StatefulWidget {
 }
 
 class _PostDetailScreenState extends State<PostDetailScreen> {
-  // Logic: Controller to manage the text typed in the bottom comment bar
   final TextEditingController _commentController = TextEditingController();
 
-  // --- SAFE DATA PARSING ---
-  // Logic: Helper to extract map data from the Firestore document
   Map<String, dynamic> get postData => widget.post.data() as Map<String, dynamic>;
 
-  // Logic: Function to upload a new comment to Firestore
+  // Logic: Function to toggle likes (Heart) in Firestore
+  Future<void> toggleLike(List likedBy) async {
+    final String uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    if (uid.isEmpty) return;
+
+    DocumentReference postRef = FirebaseFirestore.instance.collection('posts').doc(widget.post.id);
+
+    if (likedBy.contains(uid)) {
+      await postRef.update({
+        'likedBy': FieldValue.arrayRemove([uid])
+      });
+    } else {
+      await postRef.update({
+        'likedBy': FieldValue.arrayUnion([uid])
+      });
+    }
+  }
+
   Future<void> postComment() async {
     final String uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    // Validation: Prevents empty comments or guest users from posting
     if (_commentController.text.trim().isEmpty || uid.isEmpty) return;
 
-    // Connection: Fetches the current user's profile info to attach to the comment
     final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
     final userData = userDoc.data() as Map<String, dynamic>;
 
-    // Connection: Adds the comment to a 'comments' sub-collection inside the specific post document
     await FirebaseFirestore.instance
         .collection('posts')
         .doc(widget.post.id)
@@ -41,10 +51,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       'username': userData['username'] ?? 'User',
       'profileImage': userData['profileImage'] ?? '',
       'text': _commentController.text.trim(),
-      'timestamp': FieldValue.serverTimestamp(), // Logic: Uses server time for accurate sorting
+      'timestamp': FieldValue.serverTimestamp(),
     });
 
-    // UI: Clears the input and hides the keyboard after sending
     _commentController.clear();
     FocusScope.of(context).unfocus();
   }
@@ -52,8 +61,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final String currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-    // Logic: Safety checks to prevent crashes if certain fields are missing in older database entries
     final String postType = postData.containsKey('postType') ? postData['postType'] : 'image';
     final String imageUrl = postData.containsKey('ImageUrl') ? postData['ImageUrl'] : '';
     final String username = postData.containsKey('username') ? postData['username'] : 'User';
@@ -69,7 +78,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // 1. THE MEDIA CONTENT
-                  // UI: Large display area that switches between Image and VideoPlayer
                   Container(
                     width: double.infinity,
                     height: 350,
@@ -85,7 +93,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     padding: const EdgeInsets.all(12.0),
                     child: Row(
                       children: [
-                        // Connection: Real-time listener for the like count on this specific post
                         StreamBuilder<DocumentSnapshot>(
                           stream: FirebaseFirestore.instance.collection('posts').doc(widget.post.id).snapshots(),
                           builder: (context, snapshot) {
@@ -94,9 +101,18 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                               var d = snapshot.data!.data() as Map<String, dynamic>;
                               likedBy = d.containsKey('likedBy') ? d['likedBy'] : [];
                             }
+
+                            // UPDATED: Added GestureDetector to the Heart Icon
                             return Row(
                               children: [
-                                const Icon(Icons.favorite, color: Colors.red, size: 24),
+                                GestureDetector(
+                                  onTap: () => toggleLike(likedBy),
+                                  child: Icon(
+                                      likedBy.contains(currentUid) ? Icons.favorite : Icons.favorite_border,
+                                      color: likedBy.contains(currentUid) ? Colors.red : null,
+                                      size: 24
+                                  ),
+                                ),
                                 const SizedBox(width: 5),
                                 Text("${likedBy.length}", style: const TextStyle(fontWeight: FontWeight.bold)),
                               ],
@@ -104,9 +120,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           },
                         ),
                         const SizedBox(width: 20),
-                        const Icon(Icons.chat_bubble_outline, size: 24),
+                        // UPDATED: Added GestureDetector to scroll to/focus comment box
+                        GestureDetector(
+                            onTap: () => FocusScope.of(context).requestFocus(FocusNode()),
+                            child: const Icon(Icons.chat_bubble_outline, size: 24)
+                        ),
                         const SizedBox(width: 5),
-                        // Connection: Real-time listener for the number of documents in the comments sub-collection
                         StreamBuilder<QuerySnapshot>(
                           stream: FirebaseFirestore.instance.collection('posts').doc(widget.post.id).collection('comments').snapshots(),
                           builder: (context, snapshot) => Text(
@@ -136,7 +155,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   const Divider(),
 
                   // 4. COMMENTS LIST
-                  // Connection: Fetches comments for this post, sorted newest first
                   StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance
                         .collection('posts')
@@ -149,7 +167,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                       if (snapshot.data!.docs.isEmpty) return const Padding(padding: EdgeInsets.all(20), child: Text("No comments yet."));
 
                       return ListView.builder(
-                        shrinkWrap: true, // Logic: Allows the list to live inside a ScrollView
+                        shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: snapshot.data!.docs.length,
                         itemBuilder: (context, index) {
@@ -174,7 +192,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           ),
 
           // 5. COMMENT INPUT
-          // UI: Sticky bottom bar for quick typing and sending
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(color: theme.cardColor, border: Border(top: BorderSide(color: theme.dividerColor))),

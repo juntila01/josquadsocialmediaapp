@@ -37,6 +37,19 @@ class _HomeScreenState extends State<HomeScreen> {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
       builder: (context, userSnapshot) {
+
+        // Logic: Instead of showing the logo asset every time the stream connects,
+        // we show a standard centered loader to keep the UI clean during reloads.
+        if (userSnapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            body: const Center(
+              child: CircularProgressIndicator(), // UI: Simple spinner
+            ),
+          );
+        }
+        // --- END OF LOGO REMOVAL ---
+
         String livePic = widget.profileImage ?? '';
         String liveName = widget.username;
 
@@ -282,7 +295,11 @@ class _HomeScreenState extends State<HomeScreen> {
             leading: const Icon(Icons.logout, color: Colors.red),
             title: const Text("Logout", style: TextStyle(color: Colors.red)),
             onTap: () async {
+              Navigator.pop(context);
               await FirebaseAuth.instance.signOut();
+              if (mounted) {
+                Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+              }
             },
           ),
         ],
@@ -311,7 +328,6 @@ class _HomeScreenState extends State<HomeScreen> {
               user['username'] ?? 'User',
               style: TextStyle(fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.normal)
           ),
-          // UI: Shows a notification badge if there are unread messages from this person
           trailing: unreadCount > 0 ? Badge(label: Text('$unreadCount')) : null,
           onTap: () => Navigator.push(context, MaterialPageRoute(
               builder: (_) => ChatScreen(receiverId: userId, receiverName: user['username'] ?? 'User')

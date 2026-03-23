@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Connection: Essential for real-time message streaming
 import 'package:firebase_auth/firebase_auth.dart'; // Connection: Used to identify the sender of the message
+import 'package:socialmidterm_app/screens/user_profile_screen.dart'; // Connection: Updated to match your UserProfileScreen filename
 
 class ChatScreen extends StatefulWidget {
-  // Logic: Requires the ID and Name of the person you are talking to
   final String receiverId;
   final String receiverName;
 
@@ -14,12 +14,9 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  // Logic: Controller to manage the text typed in the message bar
   final TextEditingController _messageController = TextEditingController();
   final String currentUserId = FirebaseAuth.instance.currentUser!.uid;
 
-  // Connection: This function clears the red badges in your sidebar
-  // Logic: Finds all unread messages where YOU are the receiver and updates them to 'isRead: true'
   void _markAsRead() async {
     var query = await FirebaseFirestore.instance
         .collection('chats')
@@ -33,7 +30,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  // Logic: Function to upload a new message document to Firestore
   void _sendMessage() async {
     if (_messageController.text.trim().isEmpty) return;
 
@@ -41,30 +37,25 @@ class _ChatScreenState extends State<ChatScreen> {
       'senderId': currentUserId,
       'receiverId': widget.receiverId,
       'text': _messageController.text.trim(),
-      'timestamp': FieldValue.serverTimestamp(), // Logic: Critical for sorting the conversation chronologically
-      'isRead': false, // Connection: Crucial for your Sidebar notification badges
+      'timestamp': FieldValue.serverTimestamp(),
+      'isRead': false,
     });
 
-    // UI: Resets the input field after the message is sent
     _messageController.clear();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Logic: Automatically marks messages as read whenever the chat window is active
     _markAsRead();
 
     return Scaffold(
       appBar: AppBar(
-        // UI: Custom back button to ensure visibility on the primary theme color
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
         backgroundColor: Theme.of(context).primaryColor,
         elevation: 0,
-        // Connection: Real-time listener for the receiver's profile info
-        // Logic: Ensures the name and picture are always up-to-date in the header
         title: StreamBuilder<DocumentSnapshot>(
           stream: FirebaseFirestore.instance.collection('users').doc(widget.receiverId).snapshots(),
           builder: (context, snapshot) {
@@ -77,27 +68,22 @@ class _ChatScreenState extends State<ChatScreen> {
               profilePic = data['profileImage'];
             }
 
-            return Row(
-              children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundImage: (profilePic != null && profilePic.isNotEmpty)
-                      ? NetworkImage(profilePic)
-                      : null,
-                  child: (profilePic == null || profilePic.isEmpty)
-                      ? const Icon(Icons.person, size: 20)
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+            return InkWell(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => UserProfileScreen(userId: widget.receiverId)),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundImage: (profilePic != null && profilePic.isNotEmpty) ? NetworkImage(profilePic) : null,
+                    child: (profilePic == null || profilePic.isEmpty) ? const Icon(Icons.person, size: 20, color: Colors.white) : null,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Text(name, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
             );
           },
         ),
@@ -105,51 +91,74 @@ class _ChatScreenState extends State<ChatScreen> {
       body: Column(
         children: [
           Expanded(
-            // Connection: Listens for EVERY message in the 'chats' collection
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('chats')
-                  .orderBy('timestamp', descending: true)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+            child: StreamBuilder<DocumentSnapshot>(
+              // Logic: Fetching the receiver's data once more to show the image next to messages
+              stream: FirebaseFirestore.instance.collection('users').doc(widget.receiverId).snapshots(),
+              builder: (context, userSnap) {
+                String? receiverPic = userSnap.hasData && userSnap.data!.exists
+                    ? (userSnap.data!.data() as Map<String, dynamic>)['profileImage']
+                    : null;
 
-                // Logic: Client-side filter to only show messages between YOU and THIS SPECIFIC receiver
-                var chatDocs = snapshot.data!.docs.where((doc) {
-                  var data = doc.data() as Map<String, dynamic>;
-                  return (data['senderId'] == currentUserId && data['receiverId'] == widget.receiverId) ||
-                      (data['senderId'] == widget.receiverId && data['receiverId'] == currentUserId);
-                }).toList();
+                return StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance.collection('chats').orderBy('timestamp', descending: true).snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
-                return ListView.builder(
-                  reverse: true, // UI: Keeps the newest messages at the bottom of the screen
-                  padding: const EdgeInsets.all(16),
-                  itemCount: chatDocs.length,
-                  itemBuilder: (context, index) {
-                    var data = chatDocs[index].data() as Map<String, dynamic>;
-                    bool isMe = data['senderId'] == currentUserId;
+                    var chatDocs = snapshot.data!.docs.where((doc) {
+                      var data = doc.data() as Map<String, dynamic>;
+                      return (data['senderId'] == currentUserId && data['receiverId'] == widget.receiverId) ||
+                          (data['senderId'] == widget.receiverId && data['receiverId'] == currentUserId);
+                    }).toList();
 
-                    // UI: Aligns messages to the Right if sent by you, Left if received
-                    return Align(
-                      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 5),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          // UI: Uses the app's primary color for outgoing messages and dark grey for incoming
-                          color: isMe ? Theme.of(context).primaryColor : Colors.grey.shade800,
-                          borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(14),
-                            topRight: const Radius.circular(14),
-                            bottomLeft: Radius.circular(isMe ? 14 : 0),
-                            bottomRight: Radius.circular(isMe ? 0 : 14),
+                    return ListView.builder(
+                      reverse: true,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: chatDocs.length,
+                      itemBuilder: (context, index) {
+                        var data = chatDocs[index].data() as Map<String, dynamic>;
+                        bool isMe = data['senderId'] == currentUserId;
+
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 5),
+                          child: Row(
+                            mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              // UI: Show receiver's profile picture ONLY for their messages
+                              if (!isMe) ...[
+                                CircleAvatar(
+                                  radius: 14,
+                                  backgroundImage: (receiverPic != null && receiverPic.isNotEmpty) ? NetworkImage(receiverPic) : null,
+                                  child: (receiverPic == null || receiverPic.isEmpty) ? const Icon(Icons.person, size: 15) : null,
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+
+                              Flexible(
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: isMe ? Theme.of(context).primaryColor : Colors.grey.shade800,
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: const Radius.circular(14),
+                                      topRight: const Radius.circular(14),
+                                      bottomLeft: Radius.circular(isMe ? 14 : 0),
+                                      bottomRight: Radius.circular(isMe ? 0 : 14),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    data['text'] ?? '',
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                              ),
+
+                              // UI: Small spacer to keep your own messages aligned correctly
+                              if (isMe) const SizedBox(width: 30),
+                            ],
                           ),
-                        ),
-                        child: Text(
-                          data['text'] ?? '',
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      ),
+                        );
+                      },
                     );
                   },
                 );
@@ -157,8 +166,6 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
 
-          // Message Input Field
-          // UI: Styled input area with a floating action button for sending
           Padding(
             padding: const EdgeInsets.all(10),
             child: Row(
@@ -195,7 +202,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
-    // Logic: Standard resource cleanup
     _messageController.dispose();
     super.dispose();
   }
